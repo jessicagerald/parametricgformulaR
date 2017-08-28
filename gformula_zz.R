@@ -1,5 +1,6 @@
 ###R program for g-formula in observational study
 #Created on May 24th, 2017
+#directory of the GitHub folder: C:\Users\zzhang\Documents\GitHub\parametricgformulaR
 rm(list=ls())
 library(data.table)
 library(splines)
@@ -7,6 +8,7 @@ library(FSA)
 library(zoo)
 library(boot)
 library(plyr)
+library(SuperLearner)
 
 ########################                                                                            
 ####1.Read in dataset###
@@ -19,31 +21,21 @@ test1<-read.table(file="C:/Users/zzhang/Desktop/Gformula Causal Inference for Lo
 
 #####Step I: Model fitting
 ##NOTE: If we read in external dataset, need to find out the number of time points and number of subjects first.
-Ndat <- 6  # number of time points
-tp <- Ndat-1
-fitL<-list()
-for (ii in 1:tp){
-  dat<-subset(test1,t0==ii)
-  #Model for each pooled time point using previous L and A with lag 1
-  fitL[[ii]]<-glm(L ~ lag.L + lag.A + X , family = binomial, data=dat)
+pred.func.L<-function(model,dat){
+  fitL<-glm(model, family = binomial, data=dat)
+  return(fitL)
 }
-
 # fit the parametric model using average cumulative information of L and A, baseline non-vary baseline 
 # covariate X and spline function of time points 
-pred.func.L<-function(model,dat){
-  fitL.1<-glm(model, family = binomial, data=dat)
-  return(fitL.1)
-}
-pred.func.L(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2), test1)
+#fitL.1<-pred.func.L(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2), subset(test1,t0>0)) ##Limit to time>0
 #fitL.1<-glm(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2) , family = binomial, data=test1)
 
-##fit parametric outcome model using pooled records (added the current observations A and L):
-
 pred.func.Y<-function(model,dat){
-  fitY.1<-glm(model, family = binomial, data=dat)
-  return(fitY.1)
+  fitY<-glm(model, family = binomial, data=dat)
+  return(fitY)
 }
-pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0,test1)
+##fit parametric outcome model using pooled records (added the current observations A and L):
+#fitY.1<-pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0,subset(test1,t0>0))
 #fitY.1<-glm(Y ~ A + L + lag.A + lag.L + X + t0, family = binomial, data=test1) 
 
 
@@ -51,12 +43,12 @@ pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0,test1)
 ##Static treatment: always treat vs. always not treat
 startTime <-proc.time()
 set.seed(9375)
-no.sample <- 50 # Number of subjects, for each bootstrapping. Same as the number of subjects in the real data
-N <- 50         # number of subjects
+N <- 100         # number of subjects
 Ndat <-6        # number of time points
-Bsample <- 10   # Number of bootstrapping, make this number small first
+tp <-Ndat-1
+no.sample <- 100 # Number of subjects, for each bootstrapping. Same as the number of subjects in the real data
+Bsample <- 20    # Number of bootstrapping, make this number small first
 Regimes <- c(0:1)# Never treat-->0 or/and always treat-->1
-rm(Result_AT, Result_NT)
 Result_AT <-matrix(NA, nrow=Bsample, ncol=Ndat)
 Result_NT <-matrix(NA, nrow=Bsample, ncol=Ndat)
 colnames(Result_AT) <-paste("TimePoint",0:tp,sep="")
@@ -122,10 +114,12 @@ for (i in 1:Bsample){
   colnames(ids)<-c("id","newid")
   test1a <- as.data.table(test1)
   setkey(test1a, "id")
-  sample <- test1a[J(ids), allow.cartesian = TRUE]  # create the new data set
+  sample <- test1a[J(ids), allow.cartesian = TRUE]  # create the new data set names "sample"
   sample$id<-NULL
   sample$id<-sample$newid
   
+  fitL.1<-pred.func.L(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2), subset(sample,t0>0))
+  fitY.1<-pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0,subset(sample,t0>0))
   for (g in Regimes)
   if (g == 0){
   pool<-data.frame()
@@ -144,11 +138,8 @@ elapsedtime
 
 #RiskRatio for always treat and never treat
 RR<-RiskRatio$AT/RiskRatio$NT
+RR
 
-# mean_AT<-apply(RiskRatio$AT,2,mean)
-# sd_AT<-apply(RiskRatio$AT,2,sd)
-# mean_ANT<-apply(RiskRatio$ANT,2,mean)
-# sd_ANT<-apply(RiskRatio$ANT,2,sd)
 
 
 
