@@ -1,6 +1,4 @@
 ###R program for g-formula in observational study
-#Created on May 24th, 2017
-#directory of the GitHub folder: C:\Users\zzhang\Documents\GitHub\parametricgformulaR
 rm(list=ls())
 library(data.table)
 library(splines)
@@ -13,7 +11,7 @@ library(SuperLearner)
 ########################                                                                            
 ####1.Read in dataset###
 ########################
-test1<-read.table(file="C:/Users/zzhang/Desktop/Gformula Causal Inference for Longitudinal Data/test1.csv",sep=",")
+test1<-read.table(file=dir,sep=",")
 
 ##########################                                                                            
 ####2. Running Gformula###
@@ -22,22 +20,15 @@ test1<-read.table(file="C:/Users/zzhang/Desktop/Gformula Causal Inference for Lo
 #####Step I: Model fitting
 ##NOTE: If we read in external dataset, need to find out the number of time points and number of subjects first.
 pred.func.L<-function(model,dat){
-  fitL<-glm(model, family = binomial, data=dat)
+  fitL<-glm(model, family = binomial, subset(dat,t0>0))
   return(fitL)
 }
 # fit the parametric model using average cumulative information of L and A, baseline non-vary baseline 
 # covariate X and spline function of time points 
-#fitL.1<-pred.func.L(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2), subset(test1,t0>0)) ##Limit to time>0
-#fitL.1<-glm(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2) , family = binomial, data=test1)
-
 pred.func.Y<-function(model,dat){
   fitY<-glm(model, family = binomial, data=dat)
   return(fitY)
 }
-##fit parametric outcome model using pooled records (added the current observations A and L):
-#fitY.1<-pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0,subset(test1,t0>0))
-#fitY.1<-glm(Y ~ A + L + lag.A + lag.L + X + t0, family = binomial, data=test1) 
-
 
 #####Step II: Monte Carlo simulation for each subject
 ##Static treatment: always treat vs. always not treat
@@ -47,7 +38,7 @@ N <- 100         # number of subjects
 Ndat <-6        # number of time points
 tp <-Ndat-1
 no.sample <- 100 # Number of subjects, for each bootstrapping. Same as the number of subjects in the real data
-Bsample <- 20    # Number of bootstrapping, make this number small first
+Bsample <- 5    # Number of bootstrapping, make this number small first
 Regimes <- c(0:1)# Never treat-->0 or/and always treat-->1
 Result_AT <-matrix(NA, nrow=Bsample, ncol=Ndat)
 Result_NT <-matrix(NA, nrow=Bsample, ncol=Ndat)
@@ -118,8 +109,8 @@ for (i in 1:Bsample){
   sample$id<-NULL
   sample$id<-sample$newid
   
-  fitL.1<-pred.func.L(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2), subset(sample,t0>0))
-  fitY.1<-pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0,subset(sample,t0>0))
+  fitL.1<-pred.func.L(L ~ avglag.L.csum + lag.A.csum + X + ns(t0,2), sample)
+  fitY.1<-pred.func.Y(Y ~ A + L + lag.A + lag.L + X + t0, sample)
   for (g in Regimes)
   if (g == 0){
   pool<-data.frame()
